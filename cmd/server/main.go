@@ -6,11 +6,16 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/SauravNaruka/Peril/internal/gamelogic"
 	"github.com/SauravNaruka/Peril/internal/pubsub"
 	"github.com/SauravNaruka/Peril/internal/routing"
 	"github.com/joho/godotenv"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
+
+type config struct {
+	ch *amqp.Channel
+}
 
 func main() {
 	err := godotenv.Load()
@@ -35,16 +40,46 @@ func main() {
 		log.Fatalf("could not create channel: %v", err)
 	}
 
-	err = pubsub.PublishJSON(publishCh, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{
-		IsPaused: true,
-	})
-	if err != nil {
-		log.Printf("could not publish time: %v", err)
+	cfg := &config{
+		ch: publishCh,
 	}
-	fmt.Println("Pause message sent!")
+	gamelogic.PrintServerHelp()
+
+	cfg.repl()
 
 	// wait for ctrl+c
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt)
 	<-signalChan
+}
+
+func (cfg *config) repl() {
+	for {
+		words := gamelogic.GetInput()
+
+		switch words[0] {
+		case "pause":
+			fmt.Println("Publishing paused game state")
+			err := pubsub.PublishJSON(cfg.ch, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{
+				IsPaused: true,
+			})
+			if err != nil {
+				log.Printf("could not publish time: %v", err)
+			}
+		case "resume":
+			fmt.Println("Publishing resumes game state")
+			err := pubsub.PublishJSON(cfg.ch, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{
+				IsPaused: false,
+			})
+			if err != nil {
+				log.Printf("could not publish time: %v", err)
+			}
+		case "quit":
+			log.Println("goodbye")
+			return
+		default:
+			fmt.Println("unknown command")
+		}
+	}
+
 }
