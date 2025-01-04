@@ -30,8 +30,10 @@ func (cfg *config) handlerMove(gs *gamelogic.GameState) func(move gamelogic.Army
 			)
 			if err != nil {
 				fmt.Printf("error publishing message: %v\n", err)
+				return pubsub.NackRequeue
 			}
-			return pubsub.NackRequeue
+
+			return pubsub.Ack
 		}
 
 		fmt.Println("error: unknown move outcome")
