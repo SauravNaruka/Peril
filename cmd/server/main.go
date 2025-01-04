@@ -41,11 +41,23 @@ func main() {
 		log.Fatalf("could not create channel: %v", err)
 	}
 
-	_, queue, err := pubsub.DeclareAndBind(conn, routing.ExchangePerilTopic, routing.GameLogSlug, routing.GameLogSlug+".*", pubsub.SimpleQueueDurable)
+	err = pubsub.SubscribeGob(
+		conn,
+		routing.ExchangePerilTopic,
+		routing.GameLogSlug,
+		routing.GameLogSlug+".*",
+		pubsub.SimpleQueueDurable,
+		handlerLogs(),
+	)
 	if err != nil {
-		log.Fatalf("could not create queue: %v", err)
+		log.Fatalf("could not starting consuming logs: %v", err)
 	}
-	fmt.Printf("Queue %v declared and bound!\n", queue.Name)
+
+	// _, queue, err := pubsub.DeclareAndBind(conn, routing.ExchangePerilTopic, routing.GameLogSlug, routing.GameLogSlug+".*", pubsub.SimpleQueueDurable)
+	// if err != nil {
+	// 	log.Fatalf("could not create queue: %v", err)
+	// }
+	// fmt.Printf("Queue %v declared and bound!\n", queue.Name)
 
 	cfg := &config{
 		ch: publishCh,
@@ -103,4 +115,17 @@ func loadEnv() (EnvConfig, error) {
 	}
 
 	return config, nil
+}
+
+func handlerLogs() func(gamelog routing.GameLog) pubsub.Acktype {
+	return func(gamelog routing.GameLog) pubsub.Acktype {
+		defer fmt.Print("> ")
+
+		err := gamelogic.WriteLog(gamelog)
+		if err != nil {
+			fmt.Printf("error writing log: %v\n", err)
+			return pubsub.NackRequeue
+		}
+		return pubsub.Ack
+	}
 }
