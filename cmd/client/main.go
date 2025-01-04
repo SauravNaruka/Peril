@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
 
 	"github.com/SauravNaruka/Peril/internal/gamelogic"
 	"github.com/SauravNaruka/Peril/internal/pubsub"
@@ -12,6 +11,12 @@ import (
 	"github.com/joho/godotenv"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
+
+type config struct {
+	conn      amqp.Connection
+	username  string
+	gameState gamelogic.GameState
+}
 
 func main() {
 	err := godotenv.Load()
@@ -38,8 +43,52 @@ func main() {
 
 	pubsub.DeclareAndBind(conn, routing.ExchangePerilDirect, routing.PauseKey+"."+userName, routing.PauseKey, pubsub.SimpleQueueTransient)
 
-	// wait for ctrl+c
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, os.Interrupt)
-	<-signalChan
+	gameState := gamelogic.NewGameState(userName)
+
+	cfg := &config{
+		conn:      *conn,
+		username:  userName,
+		gameState: *gameState,
+	}
+
+	cfg.repl()
+
+	// // wait for ctrl+c
+	// signalChan := make(chan os.Signal, 1)
+	// signal.Notify(signalChan, os.Interrupt)
+	// <-signalChan
+}
+
+func (cfg *config) repl() {
+	for {
+		words := gamelogic.GetInput()
+		if len(words) == 0 {
+			continue
+		}
+		switch words[0] {
+		case "spawn":
+			err := cfg.gameState.CommandSpawn(words)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+		case "move":
+			_, err := cfg.gameState.CommandMove(words)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+		case "status":
+			cfg.gameState.CommandStatus()
+		case "help":
+			gamelogic.PrintClientHelp()
+		case "spam":
+			fmt.Println("Spamming not allowed yet!")
+		case "quit":
+			gamelogic.PrintQuit()
+		default:
+			fmt.Println("unknown command")
+		}
+	}
+
 }
