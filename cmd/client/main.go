@@ -49,13 +49,20 @@ func main() {
 
 	gs := gamelogic.NewGameState(userName)
 
+	cfg := &config{
+		connection:     conn,
+		publishChannel: publishCh,
+		username:       userName,
+		gameState:      *gs,
+	}
+
 	err = pubsub.SubscribeJSON(
 		conn,
 		routing.ExchangePerilTopic,
 		routing.ArmyMovesPrefix+"."+gs.GetUsername(),
 		routing.ArmyMovesPrefix+".*",
 		pubsub.SimpleQueueTransient,
-		handlerMove(gs),
+		cfg.handlerMove(gs),
 	)
 	if err != nil {
 		log.Fatalf("could not subscribe to army moves: %v", err)
@@ -73,11 +80,16 @@ func main() {
 		log.Fatalf("could not subscribe to pause: %v", err)
 	}
 
-	cfg := &config{
-		connection:     conn,
-		publishChannel: publishCh,
-		username:       userName,
-		gameState:      *gs,
+	err = pubsub.SubscribeJSON(
+		conn,
+		routing.ExchangePerilTopic,
+		routing.WarRecognitionsPrefix,
+		routing.WarRecognitionsPrefix+".*",
+		pubsub.SimpleQueueDurable,
+		handlerWar(gs),
+	)
+	if err != nil {
+		log.Fatalf("could not subscribe to war declarations: %v", err)
 	}
 
 	cfg.repl()
