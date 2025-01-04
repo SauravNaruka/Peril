@@ -13,9 +13,9 @@ import (
 )
 
 type config struct {
-	conn      amqp.Connection
-	username  string
-	gameState gamelogic.GameState
+	connection *amqp.Connection
+	username   string
+	gameState  gamelogic.GameState
 }
 
 func main() {
@@ -41,14 +41,24 @@ func main() {
 		log.Fatalf("Peril game client couldn't get username: %v", err)
 	}
 
-	pubsub.DeclareAndBind(conn, routing.ExchangePerilDirect, routing.PauseKey+"."+userName, routing.PauseKey, pubsub.SimpleQueueTransient)
+	gs := gamelogic.NewGameState(userName)
 
-	gameState := gamelogic.NewGameState(userName)
+	err = pubsub.SubscribeJSON(
+		conn,
+		routing.ExchangePerilDirect,
+		routing.PauseKey+"."+gs.GetUsername(),
+		routing.PauseKey,
+		pubsub.SimpleQueueTransient,
+		handlerPause(gs),
+	)
+	if err != nil {
+		log.Fatalf("could not subscribe to pause: %v", err)
+	}
 
 	cfg := &config{
-		conn:      *conn,
-		username:  userName,
-		gameState: *gameState,
+		connection: conn,
+		username:   userName,
+		gameState:  *gs,
 	}
 
 	cfg.repl()
@@ -65,6 +75,7 @@ func (cfg *config) repl() {
 		if len(words) == 0 {
 			continue
 		}
+
 		switch words[0] {
 		case "spawn":
 			err := cfg.gameState.CommandSpawn(words)
